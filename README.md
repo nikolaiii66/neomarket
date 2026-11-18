@@ -1,31 +1,21 @@
-# NeoMarket — Clearance-40 milestone contracts
+# NeoMarket — Clearance-40
 
-Реализация milestone-контрактов NeoMarket (УрФУ / Контракция) для Clearance-40.
+Реализация milestone-контрактов NeoMarket для Clearance-40.
 
-## Оставшиеся US
+**GitHub:** https://github.com/nikolaiii66/neomarket
 
-### B2B CORE
-- US-B2B-01 создание карточки товара
-- US-B2B-02 добавление SKU
-- US-B2B-05 просмотр карточки и причин блокировки
-- US-B2B-07 каталог для B2C (S2S)
-- US-B2B-08 reserve / unreserve
-- US-B2B-09 применение решения модерации
+## Сервисы
 
-### B2C CORE
-- US-CART-03 корзина
-- US-CAT-01 каталог с фильтрами и фасетами
-- US-CAT-03 карточка товара
-- US-ORD-01 checkout
-- US-ORD-03 отмена заказа
+| Сервис | Контракты | Команда тестов |
+|--------|-----------|----------------|
+| `services/b2b` | US-B2B-01, 02, 05, 07, 08, 09 | `cd services/b2b && python3 -m pytest -q` |
+| `services/moderation` | US-MOD-03, 05 | `cd services/moderation && python3 -m pytest -q` |
+| `services/b2c` | US-CART-03, US-CAT-01, US-CAT-03, US-ORD-01, US-ORD-03 | `cd services/b2c && python3 -m pytest -q` |
 
-### MODERATION
-- US-MOD-03 одобрение товара
-- US-MOD-05 жёсткая блокировка
+```bash
+make test
+```
 
-## Стек
-Python 3.12, FastAPI, SQLAlchemy 2, SQLite (dev/tests), pytest.
-
-## Canon / Protocols
+## Canon
 - https://github.com/URFU2026-NeoMarket/neomarket-canon
 - https://github.com/URFU2026-NeoMarket/neomarket-protocols

@@ -279,7 +279,7 @@ def _build_cart_response(
         "items_count": items_count,
         "subtotal": subtotal,
         "is_valid": all_valid if items else True,
-        "updated_at": latest,
+        "updated_at": latest.isoformat() if latest else None,
     }
 
 
