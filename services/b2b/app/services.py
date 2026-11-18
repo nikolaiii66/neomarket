@@ -59,11 +59,16 @@ def _load_product(db: Session, product_id: str) -> Product | None:
 def ensure_category(db: Session, category_id: str) -> Category:
     cat = db.get(Category, category_id)
     if not cat:
-        raise _err(400, "invalid_category", "Category does not exist")
+        raise _err(400, "INVALID_REQUEST", "Category not found")
     return cat
 
 
 def create_product(db: Session, seller_id: str, payload: ProductCreate) -> Product:
+    if payload.category_id is None:
+        raise _err(400, "INVALID_REQUEST", "category_id is required")
+    if payload.images is None or len(payload.images) < 1:
+        raise _err(400, "INVALID_REQUEST", "At least one image is required")
+
     ensure_category(db, str(payload.category_id))
     product = Product(
         seller_id=seller_id,
