@@ -25,8 +25,9 @@ def _field_names(errors: list[dict]) -> set[str]:
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = exc.errors()
     fields = _field_names(errors)
-    # Canon/DoD for US-B2B-01: product create field issues → 400 INVALID_REQUEST.
-    if request.url.path.rstrip("/").endswith("/api/v1/products") and request.method == "POST":
+    path = request.url.path.rstrip("/")
+    # Canon/DoD: product/SKU create field issues → 400 INVALID_REQUEST.
+    if request.method == "POST" and path.endswith("/api/v1/products"):
         if fields & {"category_id", "images", "title", "description"}:
             if "category_id" in fields:
                 message = "category_id must be a valid UUID"
@@ -37,6 +38,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             return JSONResponse(
                 status_code=400,
                 content={"code": "INVALID_REQUEST", "message": message},
+            )
+    if request.method == "POST" and path.endswith("/api/v1/skus"):
+        if "images" in fields:
+            return JSONResponse(
+                status_code=400,
+                content={"code": "INVALID_REQUEST", "message": "At least one image is required"},
             )
     return JSONResponse(
         status_code=422,

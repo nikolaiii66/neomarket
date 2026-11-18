@@ -28,5 +28,10 @@ jobs:
           python -m pytest -q \
             tests/test_us_b2b_01_create_product.py \
             -k "create_product_returns_201_with_created_status or seller_id_taken_from_jwt or missing_images_returns_400 or missing_category_returns_400 or invalid_category_id_returns_400"
+      - name: Run US-B2B-02 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_b2b_02_create_sku.py \
+            -k "first_sku_transitions_product_to_on_moderation or first_sku_emits_created_event_to_moderation or second_sku_no_state_change or add_sku_to_hard_blocked_returns_403 or missing_image_returns_400"
       - name: Run full B2B suite
         run: python -m pytest -q

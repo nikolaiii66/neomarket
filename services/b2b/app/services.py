@@ -95,9 +95,11 @@ def create_sku(db: Session, seller_id: str, payload: SKUCreate) -> tuple[SKU, Pr
         raise _err(403, "forbidden", "Not your product")
     if product.status == "HARD_BLOCKED":
         raise _err(403, "hard_blocked", "Product is hard-blocked")
-    if not payload.images:
-        raise _err(400, "validation_error", "SKU images are required")
+    if payload.images is None or len(payload.images) < 1:
+        raise _err(400, "INVALID_REQUEST", "At least one image is required")
 
+    # Canon US-B2B-02: only the first SKU on a CREATED product transitions + emits CREATED.
+    # Subsequent SKUs do not change status and do not emit moderation events.
     was_first = not any(not s.deleted for s in product.skus)
     sku = SKU(
         product_id=product.id,
@@ -112,20 +114,22 @@ def create_sku(db: Session, seller_id: str, payload: SKUCreate) -> tuple[SKU, Pr
         sku.characteristics.append(SKUCharacteristic(name=ch.name, value=ch.value))
     db.add(sku)
 
-    if product.status != "HARD_BLOCKED":
-        previous = product.status
+    if was_first and product.status == "CREATED":
         product.status = "ON_MODERATION"
         product.blocking_reason_id = None
         product.moderator_comment = None
         product.field_reports.clear()
+        idempotency_key = str(uuid4())
         db.add(
             OutboxEvent(
                 topic="moderation",
                 payload_json=json.dumps(
                     {
-                        "event_type": "CREATED" if was_first and previous == "CREATED" else "EDITED",
+                        "event_type": "CREATED",
                         "product_id": product.id,
                         "seller_id": product.seller_id,
+                        "idempotency_key": idempotency_key,
+                        "headers": {"X-Service-Key": "b2b-service-key"},
                     }
                 ),
             )
