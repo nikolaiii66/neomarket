@@ -1,0 +1,38 @@
+name: open-us-b2b-01-pr
+
+on:
+  push:
+    branches: [b2b-us-b2b-01]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure pull request exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          EXISTING=$(gh pr list --base main --head b2b-us-b2b-01 --json number,url --jq '.[0].url // empty')
+          if [ -z "$EXISTING" ]; then
+            URL=$(gh pr create --base main --head b2b-us-b2b-01 \
+              --title "US-B2B-01: создание карточки товара (POST /api/v1/products)" \
+              --body-file docs/pr-us-b2b-01.md)
+          else
+            URL="$EXISTING"
+            echo "PR already exists: $URL"
+          fi
+          echo "PR_URL=$URL" >> "$GITHUB_ENV"
+          NUM=$(echo "$URL" | grep -oE '[0-9]+$')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Lightweight tag so agents can discover the PR via git ls-remote without API token
+          git tag -f "us-b2b-01-pr-${NUM}" "$GITHUB_SHA"
+          git push -f origin "refs/tags/us-b2b-01-pr-${NUM}"

@@ -1,0 +1,32 @@
+name: b2b-tests
+
+on:
+  push:
+    paths:
+      - "services/b2b/**"
+      - ".github/workflows/b2b-tests.yml"
+  pull_request:
+    paths:
+      - "services/b2b/**"
+      - ".github/workflows/b2b-tests.yml"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/b2b
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Run US-B2B-01 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_b2b_01_create_product.py \
+            -k "create_product_returns_201_with_created_status or seller_id_taken_from_jwt or missing_images_returns_400 or missing_category_returns_400 or invalid_category_id_returns_400"
+      - name: Run full B2B suite
+        run: python -m pytest -q
