@@ -52,7 +52,8 @@ class SKUCreate(BaseModel):
     price: int = Field(ge=0)
     cost_price: int = Field(default=0, ge=0)
     stock_quantity: int = Field(default=0, ge=0)
-    images: list[ImageIn] = Field(min_length=1)
+    # Optional at schema so empty/missing images become canon 400 in service, not FastAPI 422.
+    images: list[ImageIn] | None = None
     characteristics: list[CharacteristicIn] = Field(default_factory=list)
 
 
