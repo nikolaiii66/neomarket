@@ -30,10 +30,27 @@ def test_seller_id_taken_from_jwt(client, valid_jwt_with_fixed_id, category_id):
             "description": "Test Description",
             "category_id": category_id,
             "images": [{"url": "/s3/test.jpg", "ordering": 0}],
+            "seller_id": str(uuid4()),  # must be ignored — IDOR protection
         },
     )
     assert response.status_code == 201
     assert response.json()["seller_id"] == expected_seller_id
+
+
+def test_missing_images_returns_400(client, auth_headers, category_id):
+    response = client.post(
+        "/api/v1/products",
+        headers=auth_headers,
+        json={
+            "title": "Test",
+            "description": "Test",
+            "category_id": category_id,
+        },
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_REQUEST"
+    assert "image" in body["message"].lower()
 
 
 def test_missing_category_returns_400(client, auth_headers):
@@ -46,7 +63,10 @@ def test_missing_category_returns_400(client, auth_headers):
             "images": [{"url": "/s3/test.jpg", "ordering": 0}],
         },
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_REQUEST"
+    assert "category" in body["message"].lower()
 
 
 def test_invalid_category_id_returns_400(client, auth_headers):
@@ -61,16 +81,4 @@ def test_invalid_category_id_returns_400(client, auth_headers):
         },
     )
     assert response.status_code == 400
-
-
-def test_missing_auth_returns_401(client, category_id):
-    response = client.post(
-        "/api/v1/products",
-        json={
-            "title": "Test",
-            "description": "Test",
-            "category_id": category_id,
-            "images": [{"url": "/s3/test.jpg", "ordering": 0}],
-        },
-    )
-    assert response.status_code == 401
+    assert response.json()["code"] == "INVALID_REQUEST"

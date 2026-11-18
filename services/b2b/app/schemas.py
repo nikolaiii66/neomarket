@@ -28,8 +28,9 @@ class ImageIn(BaseModel):
 class ProductCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=5000)
-    category_id: UUID
-    images: list[ImageIn] = Field(default_factory=list)
+    # Optional at schema level so missing fields become canon 400 in service, not FastAPI 422.
+    category_id: UUID | None = None
+    images: list[ImageIn] | None = None
     characteristics: list[CharacteristicIn] = Field(default_factory=list)
     slug: str | None = None
 
