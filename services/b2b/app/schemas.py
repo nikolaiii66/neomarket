@@ -70,10 +70,27 @@ class SKUOut(BaseModel):
     characteristics: list[CharacteristicOut]
 
 
+class FieldReportIn(BaseModel):
+    field_name: str
+    message: str | None = None
+    comment: str | None = None
+    sku_id: UUID | None = None
+    reason_id: UUID | None = None
+
+
 class FieldReportOut(BaseModel):
     field_name: str
+    # OpenAPI uses `comment`; keep `message` for backward-compatible assertions.
+    comment: str
     message: str
+    sku_id: UUID | None = None
     reason_id: UUID | None = None
+
+
+class BlockingReasonOut(BaseModel):
+    id: UUID
+    title: str
+    comment: str
 
 
 class ProductOut(BaseModel):
@@ -85,7 +102,9 @@ class ProductOut(BaseModel):
     description: str
     status: ProductStatus
     deleted: bool
+    blocked: bool
     blocking_reason_id: UUID | None
+    blocking_reason: BlockingReasonOut | None = None
     moderator_comment: str | None
     images: list[ImageOut]
     characteristics: list[CharacteristicOut]
@@ -125,7 +144,7 @@ class ModerationEventRequest(BaseModel):
     blocking_reason_id: UUID | None = None
     moderator_comment: str | None = None
     moderator_id: UUID | None = None
-    field_reports: list[FieldReportOut] | None = None
+    field_reports: list[FieldReportIn] | None = None
 
 
 class ProductPublicOut(BaseModel):

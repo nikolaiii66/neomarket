@@ -42,7 +42,7 @@ def moderate_product(client, moderation_headers, product_id, event_type="MODERAT
         "event_type": event_type,
         "occurred_at": datetime.now(timezone.utc).isoformat(),
         "hard_block": hard_block,
-        "moderator_comment": "ok" if event_type == "MODERATED" else "bad photos",
+        "moderator_comment": "ok" if event_type == "MODERATED" else "Blurry product photos",
     }
     if event_type == "BLOCKED":
         body["blocking_reason_id"] = reason
