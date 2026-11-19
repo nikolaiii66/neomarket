@@ -87,8 +87,28 @@ def test_approve_others_card_returns_403(client, db_session) -> None:
 
 
 def test_approve_after_edited_returns_409(client, db_session) -> None:
+    """Seller EDITED during review → card back to PENDING → approve must 409."""
+    from tests.helpers import service_headers
+
     moderator_id = str(uuid.uuid4())
-    card = make_card(db_session, status=ModerationCard.Status.PENDING, moderator_id=moderator_id)
+    card = make_card(db_session, moderator_id=moderator_id, status=ModerationCard.Status.IN_REVIEW)
+    edited = client.post(
+        "/api/v1/events/product",
+        headers=service_headers(),
+        json={
+            "event_type": "EDITED",
+            "idempotency_key": str(uuid.uuid4()),
+            "product_id": card.product_id,
+            "payload": {
+                "product_id": card.product_id,
+                "json_after": {"skus": [{"id": str(uuid.uuid4())}], "title": "Edited"},
+            },
+        },
+    )
+    assert edited.status_code == 202
+    db_session.refresh(card)
+    assert card.status == ModerationCard.Status.PENDING
+    assert card.assigned_moderator_id is None
 
     response = client.post(
         f"/api/v1/products/{card.product_id}/approve",
