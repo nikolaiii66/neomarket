@@ -220,20 +220,29 @@ def _idempotent(
 
 
 def reserve(db: Session, payload: ReserveRequest) -> dict:
+    """All-or-nothing reserve with row locks (SELECT FOR UPDATE) + outbox OOS event."""
     req_hash = _hash_payload(payload.model_dump(mode="json"))
 
     def compute():
-        skus: list[tuple[SKU, int]] = []
+        # Phase 1: lock + validate every SKU before mutating (all-or-nothing).
+        locked: list[tuple[SKU, int]] = []
         for item in payload.items:
-            sku = db.get(SKU, str(item.sku_id))
+            sku = db.scalar(
+                select(SKU).where(SKU.id == str(item.sku_id)).with_for_update()
+            )
             if not sku or sku.deleted:
-                raise _err(404, "sku_not_found", f"SKU {item.sku_id} not found")
-            available = sku.stock_quantity - sku.reserved_quantity
+                raise _err(404, "NOT_FOUND", f"SKU {item.sku_id} not found")
+            available = sku.stock_quantity - sku.reserved_quantity  # active_quantity
             if available < item.quantity:
-                raise _err(409, "insufficient_stock", "Not enough stock for one or more SKUs")
-            skus.append((sku, item.quantity))
+                raise _err(
+                    409,
+                    "INSUFFICIENT_STOCK",
+                    "Not enough stock for one or more SKUs",
+                )
+            locked.append((sku, item.quantity))
 
-        for sku, qty in skus:
+        # Phase 2: apply reservations only after all checks pass.
+        for sku, qty in locked:
             sku.reserved_quantity += qty
             existing = db.scalar(
                 select(Reservation).where(
@@ -245,12 +254,26 @@ def reserve(db: Session, payload: ReserveRequest) -> dict:
                 existing.quantity += qty
                 existing.active = True
             else:
-                db.add(Reservation(order_id=str(payload.order_id), sku_id=sku.id, quantity=qty, active=True))
+                db.add(
+                    Reservation(
+                        order_id=str(payload.order_id),
+                        sku_id=sku.id,
+                        quantity=qty,
+                        active=True,
+                    )
+                )
+            # active_quantity == stock - reserved; emit when it hits zero.
             if sku.stock_quantity - sku.reserved_quantity <= 0:
                 db.add(
                     OutboxEvent(
                         topic="b2c",
-                        payload_json=json.dumps({"event_type": "SKU_OUT_OF_STOCK", "sku_id": sku.id}),
+                        payload_json=json.dumps(
+                            {
+                                "event_type": "SKU_OUT_OF_STOCK",
+                                "sku_id": sku.id,
+                                "product_id": sku.product_id,
+                            }
+                        ),
                     )
                 )
         db.flush()
