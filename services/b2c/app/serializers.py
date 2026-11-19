@@ -172,6 +172,8 @@ def serialize_order(order: Order) -> dict:
                 "sku_id": item.sku_id,
                 "product_id": item.product_id,
                 "name": item.name,
+                "product_title": item.product_title or item.name,
+                "sku_name": item.sku_name or "",
                 "sku_code": item.sku_code,
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,

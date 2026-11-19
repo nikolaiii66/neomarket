@@ -532,6 +532,7 @@ def create_order(
     if not validation["is_valid"]:
         raise HTTPException(status_code=422, detail=validation)
 
+    # enrich_skus / reserve call raise_if_unavailable → 503 when B2B is down.
     enrichment = b2b.enrich_skus(db, [i.sku_id for i in cart_items])
     reserve_items = [{"sku_id": i.sku_id, "quantity": i.quantity} for i in cart_items]
     order_id = str(uuid4())
@@ -570,11 +571,15 @@ def create_order(
         unit_price = int(data["price"])
         line_total = unit_price * item.quantity
         subtotal += line_total
+        product_title = data["product_title"]
+        sku_name = data["sku_name"]
         order.items.append(
             OrderItem(
                 sku_id=item.sku_id,
                 product_id=data["product_id"],
-                name=f"{data['product_title']} — {data['sku_name']}",
+                name=f"{product_title} — {sku_name}",
+                product_title=product_title,
+                sku_name=sku_name,
                 sku_code=data["sku_code"],
                 quantity=item.quantity,
                 unit_price=unit_price,
