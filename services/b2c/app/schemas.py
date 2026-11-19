@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+# OpenAPI enum: price_asc, price_desc, popularity, new — plus canon extras.
 ALLOWED_SORTS = {
     "rating",
     "popularity",
@@ -16,6 +17,11 @@ ALLOWED_SORTS = {
     "discount_desc",
     "new",
 }
+
+ALLOWED_SORTS_MESSAGE = (
+    "Invalid sort parameter. Allowed: "
+    + ", ".join(sorted(ALLOWED_SORTS))
+)
 
 
 class ErrorBody(BaseModel):
