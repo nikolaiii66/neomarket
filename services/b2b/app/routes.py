@@ -13,6 +13,7 @@ from app.schemas import (
     ProductCreate,
     ProductOut,
     ProductPublicOut,
+    ProductUpdate,
     PublicProductsBatchRequest,
     ReserveRequest,
     SKUCreate,
@@ -55,6 +56,34 @@ def get_product(
 ):
     product = services.get_product_for_seller(db, seller_id, str(product_id))
     return serialize_product(product)
+
+
+@router.put("/api/v1/products/{product_id}", response_model=ProductOut)
+@router.patch("/api/v1/products/{product_id}", response_model=ProductOut)
+def update_product(
+    product_id: UUID,
+    payload: ProductUpdate,
+    seller_id: Annotated[str, Depends(require_seller)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    product = services.update_product_for_seller(
+        db,
+        seller_id,
+        str(product_id),
+        title=payload.title,
+        description=payload.description,
+    )
+    return serialize_product(product)
+
+
+@router.delete("/api/v1/products/{product_id}", status_code=204)
+def delete_product(
+    product_id: UUID,
+    seller_id: Annotated[str, Depends(require_seller)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    services.delete_product_for_seller(db, seller_id, str(product_id))
+    return None
 
 
 @router.post("/api/v1/skus", status_code=201, response_model=SKUOut)
@@ -124,9 +153,11 @@ def inventory_unreserve(
 
 
 @router.post("/api/v1/moderation/events")
+@router.post("/api/v1/events/moderation")
 def moderation_events(
     payload: ModerationEventRequest,
     db: Annotated[Session, Depends(get_db)],
     _: Annotated[str, Depends(service_moderation)],
 ):
+    # Canonical OpenAPI path is /api/v1/moderation/events; /events/moderation kept as alias for quest wording.
     return services.apply_moderation_event(db, payload)

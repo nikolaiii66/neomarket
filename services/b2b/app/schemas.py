@@ -35,6 +35,11 @@ class ProductCreate(BaseModel):
     slug: str | None = None
 
 
+class ProductUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, min_length=1, max_length=5000)
+
+
 class CharacteristicOut(BaseModel):
     name: str
     value: str

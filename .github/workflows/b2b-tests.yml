@@ -48,5 +48,10 @@ jobs:
           python -m pytest -q \
             tests/test_us_b2b_08_inventory.py \
             -k "reserve_all_skus_succeeds or partial_insufficient_stock_returns_409_all_rollback or idempotent_reserve_returns_200_without_double_deduction or sku_out_of_stock_event_emitted or unreserve_restores_quantities"
+      - name: Run US-B2B-09 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_b2b_09_moderation_events.py \
+            -k "moderated_event_clears_blocking_data or blocked_soft_saves_field_reports or blocked_hard_sets_terminal_status or hard_blocked_product_rejects_seller_edits or duplicate_event_same_idempotency_key_no_side_effects or missing_service_key_returns_401"
       - name: Run full B2B suite
         run: python -m pytest -q
