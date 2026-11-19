@@ -13,6 +13,7 @@ from app.schemas import (
     ProductCreate,
     ProductOut,
     ProductPublicOut,
+    PublicProductsBatchRequest,
     ReserveRequest,
     SKUCreate,
     SKUOut,
@@ -72,10 +73,27 @@ def public_products(
     _: Annotated[str, Depends(service_any)],
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    ids: str | None = Query(
+        None,
+        description="Comma-separated product UUIDs; returns only visible subset (no 404 for hidden).",
+    ),
 ):
-    products = services.list_public_products(db, limit=limit, offset=offset)
+    id_list: list[str] | None = None
+    if ids is not None and ids.strip():
+        id_list = [part.strip() for part in ids.split(",") if part.strip()]
+    products = services.list_public_products(db, limit=limit, offset=offset, ids=id_list)
     return [serialize_public_product(p) for p in products]
 
+
+@router.post("/api/v1/public/products/batch", response_model=list[ProductPublicOut])
+def public_products_batch(
+    payload: PublicProductsBatchRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[str, Depends(service_any)],
+):
+    id_list = [str(x) for x in payload.product_ids][:100]
+    products = services.batch_public_products(db, id_list)
+    return [serialize_public_product(p) for p in products]
 
 @router.get("/api/v1/public/products/{product_id}", response_model=ProductPublicOut)
 def public_product(
