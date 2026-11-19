@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
+    BlockingReason,
     Category,
     FieldReport,
     IdempotencyRecord,
@@ -50,6 +51,7 @@ def _load_product(db: Session, product_id: str) -> Product | None:
             selectinload(Product.images),
             selectinload(Product.characteristics),
             selectinload(Product.field_reports),
+            selectinload(Product.blocking_reason),
             selectinload(Product.skus).selectinload(SKU.images),
             selectinload(Product.skus).selectinload(SKU.characteristics),
         )
@@ -301,14 +303,25 @@ def apply_moderation_event(db: Session, payload: ModerationEventRequest) -> dict
                 product.status = "HARD_BLOCKED"
             else:
                 product.status = "BLOCKED"
-            product.blocking_reason_id = str(payload.blocking_reason_id)
+            reason_id = str(payload.blocking_reason_id)
+            comment = payload.moderator_comment or ""
+            title = comment.strip() or "Product blocked"
+            reason = db.get(BlockingReason, reason_id)
+            if reason is None:
+                reason = BlockingReason(id=reason_id, title=title, comment=comment)
+                db.add(reason)
+            else:
+                reason.title = title
+                reason.comment = comment
+            product.blocking_reason_id = reason_id
             product.moderator_comment = payload.moderator_comment
             product.field_reports.clear()
             for fr in payload.field_reports or []:
+                text = fr.message or fr.comment or ""
                 product.field_reports.append(
                     FieldReport(
                         field_name=fr.field_name,
-                        message=fr.message,
+                        message=text,
                         reason_id=str(fr.reason_id) if fr.reason_id else None,
                     )
                 )

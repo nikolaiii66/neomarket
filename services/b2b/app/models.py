@@ -44,12 +44,15 @@ class Product(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="CREATED", nullable=False)
     deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    blocking_reason_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    blocking_reason_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("blocking_reasons.id"), nullable=True
+    )
     moderator_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
     category: Mapped[Category] = relationship()
+    blocking_reason: Mapped[BlockingReason | None] = relationship()
     images: Mapped[list[ProductImage]] = relationship(back_populates="product", cascade="all, delete-orphan")
     characteristics: Mapped[list[ProductCharacteristic]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
@@ -58,6 +61,14 @@ class Product(Base):
     field_reports: Mapped[list[FieldReport]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
+
+
+class BlockingReason(Base):
+    __tablename__ = "blocking_reasons"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    comment: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
 
 class ProductImage(Base):

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from app.models import Product, SKU
 from app.schemas import (
+    BlockingReasonOut,
     CharacteristicOut,
     FieldReportOut,
     ImageOut,
@@ -43,6 +44,21 @@ def serialize_sku(sku: SKU, *, include_cost: bool = True) -> SKUOut | dict:
 
 
 def serialize_product(product: Product) -> ProductOut:
+    blocked = product.status in {"BLOCKED", "HARD_BLOCKED"}
+    reason_out = None
+    if product.blocking_reason is not None:
+        reason_out = BlockingReasonOut(
+            id=UUID(product.blocking_reason.id),
+            title=product.blocking_reason.title,
+            comment=product.blocking_reason.comment,
+        )
+    elif product.blocking_reason_id:
+        # Fallback if reason row missing but FK id present.
+        reason_out = BlockingReasonOut(
+            id=UUID(product.blocking_reason_id),
+            title=product.moderator_comment or "Product blocked",
+            comment=product.moderator_comment or "",
+        )
     return ProductOut(
         id=UUID(product.id),
         seller_id=UUID(product.seller_id),
@@ -52,7 +68,9 @@ def serialize_product(product: Product) -> ProductOut:
         description=product.description,
         status=product.status,  # type: ignore[arg-type]
         deleted=product.deleted,
+        blocked=blocked,
         blocking_reason_id=UUID(product.blocking_reason_id) if product.blocking_reason_id else None,
+        blocking_reason=reason_out,
         moderator_comment=product.moderator_comment,
         images=[
             ImageOut(id=UUID(i.id), url=i.url, ordering=i.ordering)
@@ -63,6 +81,7 @@ def serialize_product(product: Product) -> ProductOut:
         field_reports=[
             FieldReportOut(
                 field_name=fr.field_name,
+                comment=fr.message,
                 message=fr.message,
                 reason_id=UUID(fr.reason_id) if fr.reason_id else None,
             )
