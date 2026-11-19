@@ -1,9 +1,25 @@
+"""US-CART-03: buyer cart — guest (X-Session-Id) + JWT, B2B enrich, merge MAX."""
+
 import uuid
 
 from app.models import CartItem
 
 
-def test_get_cart_enriched_with_b2b_data_user(client, auth_headers, cart_with_item):
+def test_add_sku_increments_quantity_if_already_in_cart(client, auth_headers, cart_with_item):
+    sku = cart_with_item["sku"]
+    before = int(cart_with_item["item"].quantity)
+    response = client.post(
+        "/api/v1/cart/items",
+        json={"sku_id": sku.id, "quantity": 1},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["quantity"] == before + 1
+    assert body["items_count"] == before + 1
+
+
+def test_get_cart_enriched_with_b2b_data(client, auth_headers, cart_with_item):
     response = client.get("/api/v1/cart", headers=auth_headers)
     assert response.status_code == 200
     body = response.json()
@@ -17,7 +33,12 @@ def test_get_cart_enriched_with_b2b_data_user(client, auth_headers, cart_with_it
     assert item["unit_price_at_add"] == cart_with_item["item"].unit_price_at_add
     assert item["line_total"] == cart_with_item["sku"].price * cart_with_item["item"].quantity
     assert item["available_quantity"] == cart_with_item["sku"].active_quantity
+    assert item["is_available"] is True
+    assert item["unavailable_reason"] is None
     assert item["image"]["url"] == cart_with_item["sku"].images[0].url
+    assert body["subtotal"] == item["line_total"]
+    assert body["total_amount"] == body["subtotal"]
+    assert body["is_valid"] is True
 
 
 def test_get_cart_enriched_with_b2b_data_session(client, guest_cart_item):
@@ -29,6 +50,46 @@ def test_get_cart_enriched_with_b2b_data_session(client, guest_cart_item):
     body = response.json()
     assert len(body["items"]) == 1
     assert body["items"][0]["product_id"] == guest_cart_item["product"].id
+    assert body["items"][0]["unit_price"] == guest_cart_item["sku"].price
+
+
+def test_unavailable_sku_shown_with_reason(client, auth_headers, cart_with_item, db_session):
+    sku = cart_with_item["sku"]
+    sku.active_quantity = 0
+    db_session.commit()
+
+    response = client.get("/api/v1/cart", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["is_available"] is False
+    assert item["unavailable_reason"] == "OUT_OF_STOCK"
+    assert item["available_quantity"] == 0
+    assert item["line_total"] == 0
+    assert body["subtotal"] == 0
+    assert body["total_amount"] == 0
+    assert body["is_valid"] is False
+
+
+def test_guest_cart_merged_on_login(
+    client, auth_headers, buyer_id, db_session, seeded_catalog, session_id
+):
+    sku = seeded_catalog["skus"][0]
+    db_session.add(
+        CartItem(user_id=buyer_id, sku_id=sku.id, quantity=1, unit_price_at_add=sku.price)
+    )
+    db_session.add(
+        CartItem(session_id=session_id, sku_id=sku.id, quantity=2, unit_price_at_add=sku.price)
+    )
+    db_session.commit()
+    headers = {**auth_headers, "X-Session-Id": session_id}
+    response = client.post("/api/v1/cart/merge", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["quantity"] == 2  # MAX(guest=2, auth=1)
+    assert body["items"][0]["sku_id"] == sku.id
 
 
 def test_success_cart_validation(client, auth_headers, cart_with_item):
@@ -51,28 +112,6 @@ def test_validate_reports_price_changed(client, auth_headers, cart_with_item, db
     assert body["issues"][0]["type"] == "PRICE_CHANGED"
     assert body["issues"][0]["old_value"] == old
     assert body["issues"][0]["new_value"] == sku.price
-
-
-def test_unavailable_sku_shown_with_reason(client, auth_headers, cart_with_item, db_session):
-    sku = cart_with_item["sku"]
-    sku.active_quantity = 0
-    db_session.commit()
-    response = client.post("/api/v1/cart/validate", headers=auth_headers)
-    assert response.status_code == 200
-    assert not response.json()["is_valid"]
-    assert response.json()["issues"][0]["type"] == "OUT_OF_STOCK"
-
-
-def test_add_sku_increments_quantity_if_already_in_cart(client, auth_headers, cart_with_item):
-    sku = cart_with_item["sku"]
-    before = int(cart_with_item["item"].quantity)
-    response = client.post(
-        "/api/v1/cart/items",
-        json={"sku_id": sku.id, "quantity": 1},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200
-    assert response.json()["items"][0]["quantity"] == before + 1
 
 
 def test_clear_cart_returns_204(client, auth_headers, cart_with_item):
@@ -111,27 +150,19 @@ def test_merge_without_auth_returns_401(client, guest_cart_item):
     assert response.json()["code"] == "UNAUTHORIZED"
 
 
-def test_guest_cart_merged_on_login(
-    client, auth_headers, buyer_id, db_session, seeded_catalog, session_id
-):
-    sku = seeded_catalog["skus"][0]
-    db_session.add(
-        CartItem(user_id=buyer_id, sku_id=sku.id, quantity=1, unit_price_at_add=sku.price)
-    )
-    db_session.add(
-        CartItem(session_id=session_id, sku_id=sku.id, quantity=2, unit_price_at_add=sku.price)
-    )
-    db_session.commit()
-    headers = {**auth_headers, "X-Session-Id": session_id}
-    response = client.post("/api/v1/cart/merge", headers=headers)
-    assert response.status_code == 200
-    body = response.json()
-    assert len(body["items"]) == 1
-    assert body["items"][0]["quantity"] == 2
-    assert body["items"][0]["sku_id"] == sku.id
-
-
 def test_missing_identity_returns_400(client):
     response = client.get("/api/v1/cart")
     assert response.status_code == 400
     assert response.json()["code"] == "MISSING_CART_IDENTITY"
+
+
+def test_blocked_product_unavailable_reason(client, auth_headers, cart_with_item, db_session):
+    product = cart_with_item["product"]
+    product.status = "HARD_BLOCKED"
+    db_session.commit()
+    response = client.get("/api/v1/cart", headers=auth_headers)
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["is_available"] is False
+    assert item["unavailable_reason"] == "PRODUCT_BLOCKED"
+    assert response.json()["total_amount"] == 0
