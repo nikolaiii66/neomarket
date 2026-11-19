@@ -28,5 +28,10 @@ jobs:
           python -m pytest -q \
             tests/test_mod03_approve.py \
             -k "approve_transitions_to_moderated_and_emits_event or approve_others_card_returns_403 or approve_after_edited_returns_409 or approve_without_sku_returns_409"
+      - name: Run US-MOD-05 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_mod05_hard_block.py \
+            -k "hard_block_transitions_to_terminal_and_emits_event or hard_block_event_carries_hard_block_true or any_modify_on_hard_blocked_returns_403 or edited_event_on_hard_blocked_is_ignored or deleted_event_removes_hard_blocked"
       - name: Run full Moderation suite
         run: python -m pytest -q
