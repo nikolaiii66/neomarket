@@ -22,7 +22,7 @@ from app.models import (
     Product,
     SKU,
 )
-from app.schemas import ALLOWED_SORTS
+from app.schemas import ALLOWED_SORTS, ALLOWED_SORTS_MESSAGE
 from app.serializers import (
     append_status_history,
     is_visible,
@@ -69,19 +69,20 @@ def list_catalog_products(
     limit: int,
     offset: int,
     filters: dict[str, Any] | None = None,
+    b2b: B2BClient | None = None,
 ) -> dict:
+    # Validate sort before hitting B2B so bad clients never waste upstream calls.
     if sort and sort not in ALLOWED_SORTS:
-        raise _err(
-            400,
-            "INVALID_REQUEST",
-            "Invalid sort parameter. Allowed: rating, popularity, price_asc, price_desc, date_desc, discount_desc",
-        )
+        raise _err(400, "INVALID_REQUEST", ALLOWED_SORTS_MESSAGE)
+    if b2b is not None:
+        b2b.raise_if_unavailable()
     if search is not None:
         trimmed = search.strip()
         if len(trimmed) < 4:
             raise _err(400, "INVALID_REQUEST", "Search query must be at least 3 characters")
         search = trimmed
 
+    # Visibility (MODERATED + in stock) is applied here as the B2B public-catalog proxy.
     products = _visible_products(db, category_id)
 
     if search:
@@ -155,7 +156,9 @@ def get_product_card(db: Session, product_id: str) -> dict:
     return serialize_product_detail(product)
 
 
-def get_facets(db: Session, category_id: str) -> dict:
+def get_facets(db: Session, category_id: str, b2b: B2BClient | None = None) -> dict:
+    if b2b is not None:
+        b2b.raise_if_unavailable()
     category = db.get(Category, category_id)
     if not category:
         raise _err(404, "NOT_FOUND", f"Category with id {category_id} not found")

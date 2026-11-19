@@ -28,13 +28,23 @@ def b2b_dep() -> B2BClient:
 @router.get("/api/v1/products")
 def catalog_products(
     db: Annotated[Session, Depends(get_db)],
+    b2b: Annotated[B2BClient, Depends(b2b_dep)],
     category_id: str | None = None,
     sort: str | None = None,
     search: str | None = Query(default=None),
     q: str | None = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    price_min: int | None = Query(default=None),
+    price_max: int | None = Query(default=None),
 ):
+    filters: dict | None = None
+    if price_min is not None or price_max is not None:
+        filters = {}
+        if price_min is not None:
+            filters["price_min"] = price_min
+        if price_max is not None:
+            filters["price_max"] = price_max
     return services.list_catalog_products(
         db,
         category_id=category_id,
@@ -42,20 +52,30 @@ def catalog_products(
         search=search or q,
         limit=limit,
         offset=offset,
-        filters=None,
+        filters=filters,
+        b2b=b2b,
     )
 
 
 @router.get("/api/v1/catalog/products/{product_id}")
 @router.get("/api/v1/products/{product_id}")
-def product_card(product_id: UUID, db: Annotated[Session, Depends(get_db)]):
+def product_card(
+    product_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    b2b: Annotated[B2BClient, Depends(b2b_dep)],
+):
+    b2b.raise_if_unavailable()
     return services.get_product_card(db, str(product_id))
 
 
 @router.get("/api/v1/catalog/facets")
 @router.get("/api/v1/catalog/facets/")
-def catalog_facets(category_id: UUID, db: Annotated[Session, Depends(get_db)]):
-    return services.get_facets(db, str(category_id))
+def catalog_facets(
+    category_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    b2b: Annotated[B2BClient, Depends(b2b_dep)],
+):
+    return services.get_facets(db, str(category_id), b2b=b2b)
 
 
 @router.get("/api/v1/cart")

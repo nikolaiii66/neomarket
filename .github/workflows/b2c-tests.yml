@@ -28,5 +28,10 @@ jobs:
           python -m pytest -q \
             tests/test_us_cart_03_cart.py \
             -k "add_sku_increments_quantity_if_already_in_cart or get_cart_enriched_with_b2b_data or unavailable_sku_shown_with_reason or guest_cart_merged_on_login"
+      - name: Run US-CAT-01 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_cat_01_catalog.py \
+            -k "catalog_returns_filtered_sorted_products or facets_return_counts_per_filter_value or invalid_sort_returns_400 or b2b_unavailable_returns_502"
       - name: Run full B2C suite
         run: python -m pytest -q
