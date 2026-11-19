@@ -1,3 +1,5 @@
+"""US-ORD-03: cancel order — CANCELLED / CANCEL_PENDING / 409 / IDOR 404."""
+
 import uuid
 
 from app.auth import create_access_token
@@ -22,6 +24,8 @@ def _seed_order(db_session, buyer_id, address, payment_method, sku, product, sta
             sku_id=sku.id,
             product_id=product.id,
             name=f"{product.title} — {sku.name}",
+            product_title=product.title,
+            sku_name=sku.name,
             sku_code=sku.sku_code,
             quantity=1,
             unit_price=sku.price,
@@ -50,6 +54,38 @@ def test_cancel_paid_order_transitions_to_cancelled(
     assert body["status"] == "CANCELLED"
     assert body["status_history"][0]["status"] == "PAID"
     assert body["status_history"][-1]["status"] == "CANCELLED"
+    db_session.refresh(sku)
+    assert sku.reserved_quantity == 0
+
+
+def test_unreserve_failure_transitions_to_cancel_pending(
+    client, auth_headers, db_session, buyer_id, address, payment_method, seeded_catalog, b2b_client
+):
+    sku = seeded_catalog["skus"][0]
+    product = seeded_catalog["products"][0]
+    order = _seed_order(db_session, buyer_id, address, payment_method, sku, product, status="PAID")
+    b2b_client.force_unreserve_fail = True
+
+    response = client.post(f"/api/v1/orders/{order.id}/cancel", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "CANCEL_PENDING"
+    assert body["status_history"][-1]["status"] == "CANCEL_PENDING"
+
+
+def test_cancel_assembling_order_returns_409(
+    client, auth_headers, db_session, buyer_id, address, payment_method, seeded_catalog
+):
+    sku = seeded_catalog["skus"][0]
+    product = seeded_catalog["products"][0]
+    order = _seed_order(
+        db_session, buyer_id, address, payment_method, sku, product, status="ASSEMBLING"
+    )
+    response = client.post(f"/api/v1/orders/{order.id}/cancel", headers=auth_headers)
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "CANCEL_NOT_ALLOWED"
+    assert body["details"]["current_status"] == "ASSEMBLING"
 
 
 def test_other_user_order_returns_404(
@@ -81,6 +117,7 @@ def test_cancel_delivered_order_returns_409(
     assert response.status_code == 409
     body = response.json()
     assert body["code"] == "CANCEL_NOT_ALLOWED"
+    assert body["details"]["current_status"] == "DELIVERED"
 
 
 def test_cancel_order_not_authorized_returns_401(
@@ -107,6 +144,7 @@ def test_cancel_with_restore_cart(
         json={"restore_cart": True},
     )
     assert response.status_code == 200
+    assert response.json()["status"] == "CANCELLED"
     cart = client.get("/api/v1/cart", headers=auth_headers)
     assert len(cart.json()["items"]) == 1
     assert cart.json()["items"][0]["sku_id"] == sku.id

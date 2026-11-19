@@ -43,5 +43,10 @@ jobs:
           python -m pytest -q \
             tests/test_us_ord_01_checkout.py \
             -k "checkout_creates_paid_order_with_fixed_prices or partial_reserve_failure_returns_409 or idempotency_returns_existing_order or b2b_unavailable_returns_503"
+      - name: Run US-ORD-03 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_ord_03_cancel.py \
+            -k "cancel_paid_order_transitions_to_cancelled or unreserve_failure_transitions_to_cancel_pending or cancel_assembling_order_returns_409 or other_user_order_returns_404"
       - name: Run full B2C suite
         run: python -m pytest -q
