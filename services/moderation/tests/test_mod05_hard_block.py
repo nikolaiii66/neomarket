@@ -50,6 +50,7 @@ def test_hard_block_transitions_to_terminal_and_emits_event(client, db_session, 
     assert sent["url"] == "https://b2b.example.test/api/v1/moderation/events"
     assert sent["headers"]["X-Service-Key"] == settings.b2b_service_key
     assert sent["json"]["event_type"] == "BLOCKED"
+    assert sent["json"]["hard_block"] is True
     assert sent["json"]["blocking_reason_id"] == reason.id
     assert sent["json"]["moderator_id"] == moderator_id
     assert sent["json"]["moderator_comment"] == "counterfeit"
@@ -100,22 +101,31 @@ def test_any_modify_on_hard_blocked_returns_403(client, db_session) -> None:
     card.status = ModerationCard.Status.HARD_BLOCKED
     db_session.commit()
     reason = _reason(db_session, "COPYRIGHT_VIOLATION")
+    headers = moderator_headers(moderator_id)
 
-    approve = client.post(
-        f"/api/v1/products/{card.product_id}/approve",
-        json={},
-        headers=moderator_headers(moderator_id),
-    )
-    decline = client.post(
-        f"/api/v1/products/{card.product_id}/decline",
-        json={"blocking_reason_id": reason.id, "field_reports": []},
-        headers=moderator_headers(moderator_id),
-    )
+    mutations = [
+        client.post(f"/api/v1/products/{card.product_id}/approve", json={}, headers=headers),
+        client.post(
+            f"/api/v1/products/{card.product_id}/decline",
+            json={"blocking_reason_id": reason.id, "field_reports": []},
+            headers=headers,
+        ),
+        client.post(f"/api/v1/tickets/{card.id}/approve", json={}, headers=headers),
+        client.post(
+            f"/api/v1/tickets/{card.id}/block",
+            json={"blocking_reason_ids": [reason.id], "field_reports": []},
+            headers=headers,
+        ),
+        client.post(
+            f"/api/v1/tickets/{card.id}/decline",
+            json={"blocking_reason_id": reason.id, "field_reports": []},
+            headers=headers,
+        ),
+    ]
 
-    assert approve.status_code == 403
-    assert decline.status_code == 403
-    assert approve.json()["code"] == "HARD_BLOCKED"
-    assert decline.json()["code"] == "HARD_BLOCKED"
+    for response in mutations:
+        assert response.status_code == 403
+        assert response.json()["code"] == "HARD_BLOCKED"
 
 
 def test_edited_event_on_hard_blocked_is_ignored(client, db_session) -> None:
