@@ -63,25 +63,40 @@ def serialize_product_card(product: Product, *, is_in_cart: bool = False) -> dic
     }
 
 
+# Seller-internal fields that must never appear on B2C product/SKU payloads.
+FORBIDDEN_BUYER_SKU_FIELDS = frozenset({"cost_price", "reserved_quantity", "stock_quantity"})
+
+
 def serialize_product_detail(product: Product) -> dict:
+    """Buyer-facing product card — dedicated allowlist serializer (not B2B dump)."""
     card = serialize_product_card(product)
     skus = []
     for sku in sorted(product.skus, key=lambda s: s.created_at):
         if sku.deleted:
             continue
         skus.append(serialize_sku(sku))
+    # Prefer SKU old_price discount signal; fall back to product.discount.
+    discount = int(product.discount or 0)
+    for sku in skus:
+        if sku.get("discount", 0) > discount:
+            discount = int(sku["discount"])
+    old_prices = [s["old_price"] for s in skus if s.get("old_price")]
     return {
         **card,
         "description": product.description,
         "status": product.status,
+        "discount": discount,
+        "old_price": min(old_prices) if old_prices else card.get("old_price"),
         "attributes": {c.name: c.value for c in product.characteristics},
         "characteristics": [{"name": c.name, "value": c.value} for c in product.characteristics],
         "skus": skus,
+        # Happy-path tests expect a simple URL list for product images.
         "images": [img.url for img in sorted(product.images, key=lambda i: i.ordering)],
     }
 
 
 def serialize_sku(sku: SKU) -> dict:
+    """Allowlist-only SKU view for buyers — never dump ORM columns."""
     images = [
         {
             "id": img.id,
@@ -92,12 +107,17 @@ def serialize_sku(sku: SKU) -> dict:
         }
         for img in sorted(sku.images, key=lambda i: i.ordering)
     ]
-    return {
+    discount = 0
+    if sku.old_price is not None and sku.old_price > sku.price:
+        discount = sku.old_price - sku.price
+    payload = {
         "id": sku.id,
         "name": sku.name,
         "sku_code": sku.sku_code or sku.id,
         "price": sku.price,
         "old_price": sku.old_price,
+        "discount": discount,
+        # Public stock is active_quantity only — never reserved_quantity / cost_price.
         "available_quantity": sku.active_quantity,
         "active_quantity": sku.active_quantity,
         "in_stock": sku.active_quantity > 0,
@@ -106,6 +126,8 @@ def serialize_sku(sku: SKU) -> dict:
         "images": images,
         "image": images[0]["url"] if images else None,
     }
+    assert FORBIDDEN_BUYER_SKU_FIELDS.isdisjoint(payload.keys())
+    return payload
 
 
 def serialize_address(address: Address) -> dict:
