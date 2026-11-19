@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -604,7 +607,8 @@ def create_order(
     return serialize_order(order), 201  # type: ignore[arg-type]
 
 
-CANCELLABLE = {"CREATED", "PAID", "ASSEMBLING", "DELIVERING"}
+# US-ORD-03 DoD: buyer cancel allowed only from CREATED/PAID (ASSEMBLING → 409).
+CANCELLABLE = {"CREATED", "PAID"}
 
 
 def cancel_order(
@@ -639,7 +643,13 @@ def cancel_order(
     try:
         b2b.unreserve(db, order_id=order.id, items=items)
         order.status = "CANCELLED"
-    except HTTPException:
+    except HTTPException as exc:
+        # Accept cancel intent; scaffold async retry later (log + CANCEL_PENDING).
+        logger.error(
+            "unreserve failed for order %s → CANCEL_PENDING: %s",
+            order.id,
+            getattr(exc, "detail", exc),
+        )
         order.status = "CANCEL_PENDING"
     order.cancel_reason = reason
     order.updated_at = datetime.now(timezone.utc)
