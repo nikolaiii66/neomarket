@@ -34,9 +34,9 @@ class B2BClient:
 
     def raise_if_unavailable(self) -> None:
         if self.unavailable:
-            # DoD accepts 502 or 503; 502 matches US-CAT-01 unhappy-path name.
+            # US-ORD-01 DoD: 503; US-CAT-01 also accepts 502/503.
             raise HTTPException(
-                status_code=502,
+                status_code=503,
                 detail={"code": "B2B_UNAVAILABLE", "message": "B2B service unavailable"},
             )
 

@@ -263,6 +263,9 @@ class OrderItem(Base):
     sku_id: Mapped[str] = mapped_column(String(36), nullable=False)
     product_id: Mapped[str] = mapped_column(String(36), nullable=False)
     name: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Historical snapshot at purchase time (canon checkout).
+    product_title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    sku_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     sku_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)

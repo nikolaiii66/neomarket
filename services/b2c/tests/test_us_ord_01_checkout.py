@@ -1,3 +1,5 @@
+"""US-ORD-01: checkout — fixed prices, all-or-nothing reserve, idempotency."""
+
 import uuid
 
 from app.b2b_client import ReserveFailure
@@ -5,8 +7,13 @@ from app.models import CartItem
 
 
 def test_checkout_creates_paid_order_with_fixed_prices(
-    client, auth_headers, cart_with_item, address, payment_method
+    client, auth_headers, cart_with_item, address, payment_method, db_session
 ):
+    sku = cart_with_item["sku"]
+    product = cart_with_item["product"]
+    qty = cart_with_item["item"].quantity
+    price_at_checkout = sku.price
+
     response = client.post(
         "/api/v1/orders",
         headers={**auth_headers, "Idempotency-Key": str(uuid.uuid4())},
@@ -19,13 +26,31 @@ def test_checkout_creates_paid_order_with_fixed_prices(
     assert response.status_code == 201
     body = response.json()
     assert body["status"] == "PAID"
-    expected_total = cart_with_item["item"].quantity * cart_with_item["sku"].price
+    expected_total = qty * price_at_checkout
     assert body["subtotal"] == expected_total
     assert body["delivery_cost"] == 0
     assert body["total"] == expected_total
     assert len(body["items"]) == 1
-    assert body["items"][0]["sku_id"] == cart_with_item["sku"].id
-    assert body["items"][0]["unit_price"] == cart_with_item["sku"].price
+    item = body["items"][0]
+    assert item["sku_id"] == sku.id
+    assert item["unit_price"] == price_at_checkout
+    assert item["line_total"] == expected_total
+    assert item["product_title"] == product.title
+    assert item["sku_name"] == sku.name
+
+    # Price snapshot stays fixed even if seller changes SKU price afterwards.
+    sku.price = price_at_checkout + 9999
+    db_session.commit()
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    from app.models import Order
+
+    order = db_session.scalar(
+        select(Order).where(Order.id == body["id"]).options(selectinload(Order.items))
+    )
+    assert order is not None
+    assert order.items[0].unit_price == price_at_checkout
+    assert order.items[0].product_title == product.title
 
     cart = client.get("/api/v1/cart", headers=auth_headers)
     assert cart.json()["items"] == []
@@ -48,19 +73,9 @@ def test_partial_reserve_failure_returns_409(
     assert body["code"] == "RESERVE_FAILED"
     assert body["details"][0]["sku_id"] == sku.id
     assert body["details"][0]["reason"] == "PRODUCT_BLOCKED"
-
-
-def test_cart_validation_error_returns_422(
-    client, auth_headers, cart_with_item, address, payment_method, db_session
-):
-    cart_with_item["sku"].active_quantity = 0
-    db_session.commit()
-    response = client.post(
-        "/api/v1/orders",
-        headers={**auth_headers, "Idempotency-Key": str(uuid.uuid4())},
-        json={"address_id": address.id, "payment_method_id": payment_method.id},
-    )
-    assert response.status_code == 422
+    # Cart must remain (all-or-nothing — no order, no clear).
+    cart = client.get("/api/v1/cart", headers=auth_headers)
+    assert len(cart.json()["items"]) == 1
 
 
 def test_idempotency_returns_existing_order(
@@ -98,6 +113,32 @@ def test_idempotency_returns_existing_order(
     )
     assert second.status_code == 201
     assert second.json()["id"] == order_id
+
+
+def test_b2b_unavailable_returns_503(
+    client, auth_headers, cart_with_item, address, payment_method, b2b_client
+):
+    b2b_client.unavailable = True
+    response = client.post(
+        "/api/v1/orders",
+        headers={**auth_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={"address_id": address.id, "payment_method_id": payment_method.id},
+    )
+    assert response.status_code == 503
+    assert response.json()["code"] == "B2B_UNAVAILABLE"
+
+
+def test_cart_validation_error_returns_422(
+    client, auth_headers, cart_with_item, address, payment_method, db_session
+):
+    cart_with_item["sku"].active_quantity = 0
+    db_session.commit()
+    response = client.post(
+        "/api/v1/orders",
+        headers={**auth_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={"address_id": address.id, "payment_method_id": payment_method.id},
+    )
+    assert response.status_code == 422
 
 
 def test_order_not_authorized_returns_401(client, address, payment_method):

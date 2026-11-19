@@ -38,5 +38,10 @@ jobs:
           python -m pytest -q \
             tests/test_us_cat_03_product_card.py \
             -k "product_card_returns_full_data_with_skus or cost_price_absent_in_response or blocked_product_returns_404 or sku_without_stock_is_shown_as_unavailable"
+      - name: Run US-ORD-01 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_ord_01_checkout.py \
+            -k "checkout_creates_paid_order_with_fixed_prices or partial_reserve_failure_returns_409 or idempotency_returns_existing_order or b2b_unavailable_returns_503"
       - name: Run full B2C suite
         run: python -m pytest -q
