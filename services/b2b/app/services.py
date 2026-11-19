@@ -151,16 +151,30 @@ def get_product_for_seller(db: Session, seller_id: str, product_id: str) -> Prod
     return product
 
 
-def list_public_products(db: Session, *, limit: int = 20, offset: int = 0) -> list[Product]:
-    products = db.scalars(
-        select(Product).options(
-            selectinload(Product.images),
-            selectinload(Product.characteristics),
-            selectinload(Product.skus).selectinload(SKU.images),
-            selectinload(Product.skus).selectinload(SKU.characteristics),
-        )
-    ).all()
+def list_public_products(
+    db: Session,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    ids: list[str] | None = None,
+) -> list[Product]:
+    """B2C catalog: MODERATED + not deleted + in-stock. Optional ids = visible subset only."""
+    stmt = select(Product).options(
+        selectinload(Product.images),
+        selectinload(Product.characteristics),
+        selectinload(Product.skus).selectinload(SKU.images),
+        selectinload(Product.skus).selectinload(SKU.characteristics),
+    )
+    if ids is not None:
+        if not ids:
+            return []
+        stmt = stmt.where(Product.id.in_(ids))
+    products = db.scalars(stmt).all()
     visible = [p for p in products if is_visible_for_b2c(p)]
+    if ids is not None:
+        # Preserve request order; never 404 for missing/hidden ids.
+        by_id = {p.id: p for p in visible}
+        return [by_id[i] for i in ids if i in by_id]
     return visible[offset : offset + limit]
 
 
@@ -169,6 +183,10 @@ def get_public_product(db: Session, product_id: str) -> Product:
     if not product or not is_visible_for_b2c(product):
         raise _err(404, "not_found", "Product not found")
     return product
+
+
+def batch_public_products(db: Session, product_ids: list[str]) -> list[Product]:
+    return list_public_products(db, ids=product_ids, limit=max(len(product_ids), 1), offset=0)
 
 
 def _hash_payload(data: dict) -> str:

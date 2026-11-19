@@ -38,5 +38,10 @@ jobs:
           python -m pytest -q \
             tests/test_us_b2b_05_get_product.py \
             -k "get_moderated_product_returns_full_payload or get_blocked_product_returns_blocking_reason_and_field_reports or get_others_product_returns_404 or get_nonexistent_returns_404"
+      - name: Run US-B2B-07 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_b2b_07_public_catalog.py \
+            -k "catalog_returns_moderated_in_stock_products or catalog_excludes_hard_blocked or catalog_missing_service_key_returns_401 or catalog_response_has_no_cost_price or batch_ids_returns_visible_subset"
       - name: Run full B2B suite
         run: python -m pytest -q

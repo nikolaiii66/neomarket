@@ -157,3 +157,7 @@ class ProductPublicOut(BaseModel):
     characteristics: list[CharacteristicOut]
     skus: list[dict]
     min_price: int | None = None
+
+
+class PublicProductsBatchRequest(BaseModel):
+    product_ids: list[UUID] = Field(default_factory=list, max_length=100)
