@@ -43,5 +43,10 @@ jobs:
           python -m pytest -q \
             tests/test_us_b2b_07_public_catalog.py \
             -k "catalog_returns_moderated_in_stock_products or catalog_excludes_hard_blocked or catalog_missing_service_key_returns_401 or catalog_response_has_no_cost_price or batch_ids_returns_visible_subset"
+      - name: Run US-B2B-08 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_b2b_08_inventory.py \
+            -k "reserve_all_skus_succeeds or partial_insufficient_stock_returns_409_all_rollback or idempotent_reserve_returns_200_without_double_deduction or sku_out_of_stock_event_emitted or unreserve_restores_quantities"
       - name: Run full B2B suite
         run: python -m pytest -q
