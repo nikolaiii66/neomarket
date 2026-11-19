@@ -151,6 +151,28 @@ def get_product_for_seller(db: Session, seller_id: str, product_id: str) -> Prod
     return product
 
 
+def update_product_for_seller(
+    db: Session, seller_id: str, product_id: str, *, title: str | None = None, description: str | None = None
+) -> Product:
+    product = get_product_for_seller(db, seller_id, product_id)
+    if product.status == "HARD_BLOCKED":
+        raise _err(403, "hard_blocked", "Product is hard-blocked")
+    if title is not None:
+        product.title = title
+    if description is not None:
+        product.description = description
+    db.commit()
+    return _load_product(db, product.id)  # type: ignore[return-value]
+
+
+def delete_product_for_seller(db: Session, seller_id: str, product_id: str) -> None:
+    product = get_product_for_seller(db, seller_id, product_id)
+    if product.status == "HARD_BLOCKED":
+        raise _err(403, "hard_blocked", "Product is hard-blocked")
+    product.deleted = True
+    db.commit()
+
+
 def list_public_products(
     db: Session,
     *,
@@ -366,15 +388,19 @@ def apply_moderation_event(db: Session, payload: ModerationEventRequest) -> dict
                         reason_id=str(fr.reason_id) if fr.reason_id else None,
                     )
                 )
-            if payload.hard_block:
-                db.add(
-                    OutboxEvent(
-                        topic="b2c",
-                        payload_json=json.dumps(
-                            {"event_type": "PRODUCT_BLOCKED", "product_id": product.id, "hard_block": True}
-                        ),
-                    )
+            # Canon: cascade PRODUCT_BLOCKED to B2C on soft and hard block.
+            db.add(
+                OutboxEvent(
+                    topic="b2c",
+                    payload_json=json.dumps(
+                        {
+                            "event_type": "PRODUCT_BLOCKED",
+                            "product_id": product.id,
+                            "hard_block": bool(payload.hard_block),
+                        }
+                    ),
                 )
+            )
         db.flush()
         return {"status": product.status, "product_id": product.id}, 200
 
@@ -387,6 +413,8 @@ __all__ = [
     "create_product",
     "create_sku",
     "get_product_for_seller",
+    "update_product_for_seller",
+    "delete_product_for_seller",
     "list_public_products",
     "get_public_product",
     "reserve",
