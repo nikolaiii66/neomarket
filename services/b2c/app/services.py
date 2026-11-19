@@ -219,6 +219,22 @@ def _cart_query(user_id: str | None, session_id: str | None):
     return q.where(CartItem.session_id == session_id)
 
 
+def _unavailable_reason(data: dict | None, quantity: int) -> str | None:
+    """Compute why a cart line cannot be checked out. Never stored in DB."""
+    if not data:
+        return "PRODUCT_DELETED"
+    if data.get("product_deleted"):
+        return "PRODUCT_DELETED"
+    if data.get("product_status") in {"BLOCKED", "HARD_BLOCKED"}:
+        return "PRODUCT_BLOCKED"
+    available_qty = int(data.get("active_quantity") or 0)
+    if available_qty <= 0:
+        return "OUT_OF_STOCK"
+    if available_qty < quantity:
+        return "OUT_OF_STOCK"
+    return None
+
+
 def _build_cart_response(
     db: Session,
     b2b: B2BClient,
@@ -234,6 +250,7 @@ def _build_cart_response(
     latest = None
     for item in items:
         data = enrichment.get(item.sku_id)
+        reason = _unavailable_reason(data, item.quantity)
         if not data:
             available = False
             unit_price = item.unit_price_at_add
@@ -244,13 +261,13 @@ def _build_cart_response(
             image = None
         else:
             available_qty = int(data["active_quantity"])
-            blocked = data["product_status"] in {"BLOCKED", "HARD_BLOCKED"} or data["product_deleted"]
-            available = (not blocked) and available_qty > 0 and available_qty >= item.quantity
+            available = reason is None
             unit_price = int(data["price"])
             product_id = data["product_id"]
             name = f"{data['product_title']} — {data['sku_name']}"
             sku_code = data["sku_code"]
             image = data["image"]
+        # Unavailable lines stay in the response but do not contribute to totals.
         line_total = unit_price * item.quantity if available else 0
         if not available:
             all_valid = False
@@ -270,6 +287,7 @@ def _build_cart_response(
                 "line_total": line_total,
                 "available_quantity": available_qty if data else 0,
                 "is_available": available,
+                "unavailable_reason": reason,
                 "image": image,
             }
         )
@@ -278,6 +296,7 @@ def _build_cart_response(
         "items": out_items,
         "items_count": items_count,
         "subtotal": subtotal,
+        "total_amount": subtotal,
         "is_valid": all_valid if items else True,
         "updated_at": latest.isoformat() if latest else None,
     }

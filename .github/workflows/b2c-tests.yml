@@ -1,0 +1,32 @@
+name: b2c-tests
+
+on:
+  push:
+    paths:
+      - "services/b2c/**"
+      - ".github/workflows/b2c-tests.yml"
+  pull_request:
+    paths:
+      - "services/b2c/**"
+      - ".github/workflows/b2c-tests.yml"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/b2c
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Run US-CART-03 DoD tests
+        run: |
+          python -m pytest -q \
+            tests/test_us_cart_03_cart.py \
+            -k "add_sku_increments_quantity_if_already_in_cart or get_cart_enriched_with_b2b_data or unavailable_sku_shown_with_reason or guest_cart_merged_on_login"
+      - name: Run full B2C suite
+        run: python -m pytest -q

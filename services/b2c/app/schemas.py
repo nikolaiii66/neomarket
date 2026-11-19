@@ -151,6 +151,8 @@ class CartItemOut(BaseModel):
     line_total: int
     available_quantity: int
     is_available: bool
+    # Computed on each enrich from B2B — never persisted in DB.
+    unavailable_reason: str | None = None
     image: ImageRef | None = None
 
 
@@ -159,6 +161,8 @@ class CartResponse(BaseModel):
     items: list[CartItemOut]
     items_count: int
     subtotal: int
+    # Alias for quest wording «total_amount»; equals subtotal of available lines only.
+    total_amount: int | None = None
     is_valid: bool
     updated_at: datetime | None = None
 
